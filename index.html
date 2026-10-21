@@ -32,7 +32,10 @@
           <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400 text-2xl font-black text-[#07110d] shadow-lg shadow-emerald-950/40">♪</div>
           <div><p class="text-xs font-bold uppercase tracking-[.24em] text-emerald-400">Música cristiana</p><p class="text-sm text-emerald-100/65">Grupo Musical</p></div>
         </div>
-        <button id="admin-open" class="min-h-11 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5 text-sm font-bold text-emerald-300 transition hover:bg-emerald-400/20">⚙ Cambiar orden</button>
+        <div class="flex flex-wrap justify-end gap-2">
+          <button id="next-open" class="min-h-11 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5 text-sm font-bold text-emerald-300 transition hover:bg-emerald-400/20">⏭ Consultar próxima</button>
+          <button id="admin-open" class="min-h-11 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5 text-sm font-bold text-emerald-300 transition hover:bg-emerald-400/20">⚙ Cambiar orden</button>
+        </div>
       </div>
       <div class="mt-7 grid gap-6 md:grid-cols-[1fr_320px] md:items-end">
         <div>
@@ -53,11 +56,20 @@
       <select id="group-filter" class="min-h-12 rounded-xl border border-emerald-950 bg-[#0c1911] px-4 text-emerald-50/80 outline-none focus:border-emerald-500"><option value="">Todos los grupos</option></select>
       <button id="refresh" class="min-h-12 rounded-xl border border-white/10 bg-white/5 px-4 font-semibold text-emerald-50/80 transition hover:bg-white/10">↻ Actualizar</button>
     </div>
-    <div id="admin-tools" class="mb-4 hidden items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-950/40 p-4">
-      <p class="text-sm font-medium text-emerald-100">Mantén pulsado el asa <span class="text-lg text-emerald-300">⠿</span> y arrastra. También puedes usar las flechas.</p>
-      <div class="flex shrink-0 gap-2">
-        <button id="cancel-order" class="min-h-11 rounded-xl border border-white/10 px-3 text-sm font-semibold text-emerald-50/70">Cancelar</button>
-        <button id="save-order" class="min-h-11 rounded-xl bg-emerald-400 px-4 text-sm font-extrabold text-[#07110d] shadow-lg shadow-emerald-950/40 hover:bg-lime-300">Actualizar orden</button>
+    <div id="admin-tools" class="mb-4 hidden flex-col gap-4 rounded-2xl border border-emerald-400/30 bg-emerald-950/40 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <p class="text-sm font-medium text-emerald-100">Modo administrador activo. Mantén pulsado el asa <span class="text-lg text-emerald-300">⠿</span> y arrastra, o usa las flechas.</p>
+        <div class="flex shrink-0 flex-wrap gap-2">
+          <button id="cancel-order" class="min-h-11 rounded-xl border border-white/10 px-3 text-sm font-semibold text-emerald-50/70">Descartar cambios</button>
+          <button id="save-order" class="min-h-11 rounded-xl bg-emerald-400 px-4 text-sm font-extrabold text-[#07110d] shadow-lg shadow-emerald-950/40 hover:bg-lime-300">Actualizar orden</button>
+          <button id="exit-admin" class="min-h-11 rounded-xl border border-white/10 px-3 text-sm font-semibold text-emerald-50/70">Salir de admin</button>
+        </div>
+      </div>
+      <div class="grid gap-3 border-t border-emerald-400/15 pt-4 sm:grid-cols-[1fr_auto] sm:items-end">
+        <label class="text-sm font-semibold text-emerald-100">Elegir próxima canción
+          <select id="next-song-select" class="mt-2 min-h-12 w-full rounded-xl border border-emerald-900 bg-[#07110d] px-3 text-white outline-none focus:border-emerald-400"><option value="">Sin próxima canción seleccionada</option></select>
+        </label>
+        <button id="save-next-song" class="min-h-12 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 font-bold text-emerald-300 hover:bg-emerald-400/20">Guardar próxima canción</button>
       </div>
     </div>
     <div id="status" class="mb-4 hidden rounded-xl border p-4 text-sm"></div>
@@ -68,7 +80,7 @@
     <form id="admin-form" class="p-6">
       <div class="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-xl text-emerald-300">🔐</div>
       <h2 class="text-xl font-bold text-white">Acceso de administrador</h2>
-      <p class="mt-1 text-sm text-emerald-50/55">Ingresa la clave para cambiar el orden del repertorio.</p>
+      <p class="mt-1 text-sm text-emerald-50/55">Ingresa la clave para cambiar el orden y elegir la próxima canción.</p>
       <input id="admin-password" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Clave" class="mt-5 min-h-12 w-full rounded-xl border border-emerald-900 bg-[#07110d] px-4 text-white outline-none focus:border-emerald-400">
       <p id="admin-error" class="mt-2 hidden text-sm text-rose-300"></p>
       <div class="mt-5 flex justify-end gap-2">
@@ -76,6 +88,20 @@
         <button id="admin-submit" type="submit" class="min-h-11 rounded-xl bg-emerald-400 px-5 text-sm font-extrabold text-[#07110d] hover:bg-lime-300">Entrar</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="next-dialog" class="w-[min(92vw,520px)] rounded-3xl border border-emerald-400/20 p-0 shadow-2xl">
+    <div class="p-6 sm:p-7">
+      <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-2xl text-emerald-300">⏭</div>
+      <p class="text-xs font-bold uppercase tracking-[.2em] text-emerald-400">Próxima canción</p>
+      <h2 id="next-title" class="mt-2 text-2xl font-black text-white">Aún no seleccionada</h2>
+      <p id="next-details" class="mt-2 text-sm text-emerald-50/60"></p>
+      <p id="next-empty" class="mt-3 hidden text-sm text-emerald-50/60">El administrador todavía no ha elegido la próxima canción.</p>
+      <div class="mt-6 flex flex-wrap justify-end gap-2">
+        <button id="next-lyrics" class="hidden min-h-11 rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-bold text-emerald-300">📖 Ver letra</button>
+        <button id="close-next" class="min-h-11 rounded-xl bg-emerald-400 px-4 text-sm font-bold text-[#07110d]">Cerrar</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="lyrics-dialog" class="h-[92dvh] w-[min(96vw,1100px)] max-w-none overflow-hidden rounded-2xl border border-emerald-400/20 p-0 shadow-2xl">
@@ -100,8 +126,9 @@
     const lyricsDialog = document.getElementById('lyrics-dialog');
     const lyricsFrame = document.getElementById('lyrics-frame');
     const adminDialog = document.getElementById('admin-dialog');
+    const nextDialog = document.getElementById('next-dialog');
     let activePdfPage = 1, activePdfZoom = 100;
-    let songs = [], adminMode = false, adminPassword = '', sortable = null;
+    let songs = [], adminMode = false, adminPassword = '', sortable = null, nextSongTitle = '';
 
     function showStatus(message, kind = 'info') {
       statusEl.textContent = message;
@@ -122,15 +149,23 @@
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || 'No se pudieron cargar las canciones.');
         songs = (data.songs || []).sort((a, b) => Number(a.order) - Number(b.order));
+        nextSongTitle = data.nextSong || '';
         updateGroups(); render(); updateProgress();
         statusEl.classList.add('hidden');
-      } catch (error) { showStatus('Error al cargar el repertorio: ' + error.message, 'error'); }
+        return true;
+      } catch (error) { showStatus('Error al cargar el repertorio: ' + error.message, 'error'); return false; }
     }
     function updateGroups() {
       const select = document.getElementById('group-filter'), selected = select.value;
       const groups = [...new Set(songs.map(s => s.group || 'Sin grupo'))].sort((a,b) => a.localeCompare(b, 'es'));
       select.innerHTML = '<option value="">Todos los grupos</option>' + groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
       select.value = groups.includes(selected) ? selected : '';
+    }
+    function updateNextSongPicker() {
+      const select = document.getElementById('next-song-select');
+      if (!select) return;
+      select.innerHTML = '<option value="">Sin próxima canción seleccionada</option>' + songs.map(song => `<option value="${escapeHtml(song.title)}">${escapeHtml(song.order)}. ${escapeHtml(song.title)}</option>`).join('');
+      select.value = songs.some(song => song.title === nextSongTitle) ? nextSongTitle : '';
     }
     function render() {
       if (sortable) { sortable.destroy(); sortable = null; }
@@ -140,6 +175,7 @@
       document.getElementById('admin-tools').classList.toggle('hidden', !adminMode);
       document.getElementById('admin-tools').classList.toggle('flex', adminMode);
       document.getElementById('admin-open').classList.toggle('hidden', adminMode);
+      updateNextSongPicker();
       document.getElementById('search').disabled = adminMode;
       document.getElementById('group-filter').disabled = adminMode;
       document.getElementById('refresh').disabled = adminMode;
@@ -198,8 +234,9 @@
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error('La clave no es correcta.');
         adminPassword = password; adminMode = true;
+        sessionStorage.setItem('renacer-admin-password', password);
         adminDialog.close(); document.getElementById('admin-password').value = '';
-        render(); showStatus('Modo de edición activado. Arrastra las canciones o usa las flechas y pulsa “Actualizar orden” para guardar.', 'info');
+        render(); showStatus('Modo administrador activado. Puedes cambiar el orden y elegir la próxima canción. La sesión se conserva en esta pestaña.', 'info');
       } catch (error) { errorEl.textContent = error.message; errorEl.classList.remove('hidden'); }
       finally { submit.disabled = false; submit.textContent = 'Entrar'; }
     }
@@ -210,14 +247,70 @@
         const response = await fetch('/api/orden', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action:'reorder', password:adminPassword, titles:songs.map(song => song.title)}) });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar el orden.');
-        adminMode = false; adminPassword = '';
-        await loadSongs(); showStatus('Orden actualizado. Los demás usuarios lo verán al actualizar o en unos segundos.', 'info');
+        await loadSongs(); showStatus('Orden actualizado. Sigues en modo administrador; los demás usuarios lo verán al actualizar o en unos segundos.', 'info');
       } catch (error) { showStatus(error.message, 'error'); }
       finally { button.disabled = false; button.textContent = 'Actualizar orden'; }
     }
     async function cancelOrder() {
-      adminMode = false; adminPassword = '';
       await loadSongs();
+      showStatus('Cambios descartados. Sigues en modo administrador.', 'info');
+    }
+    async function exitAdmin() {
+      adminMode = false; adminPassword = '';
+      sessionStorage.removeItem('renacer-admin-password');
+      await loadSongs();
+      showStatus('Saliste del modo administrador.', 'info');
+    }
+    async function saveNextSong() {
+      const button = document.getElementById('save-next-song');
+      const title = document.getElementById('next-song-select').value;
+      button.disabled = true; button.textContent = 'Guardando…';
+      try {
+        const response = await fetch('/api/orden', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action:'setNextSong', password:adminPassword, title}) });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar la próxima canción.');
+        nextSongTitle = data.nextSong || '';
+        updateNextSongPicker();
+        showStatus(nextSongTitle ? `Próxima canción guardada: ${nextSongTitle}. Ya está disponible para todos.` : 'Se quitó la próxima canción seleccionada.', 'info');
+      } catch (error) { showStatus(error.message, 'error'); }
+      finally { button.disabled = false; button.textContent = 'Guardar próxima canción'; }
+    }
+    async function consultNext() {
+      const consultButton = document.getElementById('next-open');
+      consultButton.disabled = true; consultButton.textContent = 'Consultando…';
+      if (!adminMode && !(await loadSongs())) {
+        consultButton.disabled = false; consultButton.textContent = '⏭ Consultar próxima';
+        return;
+      }
+      const song = songs.find(item => item.title === nextSongTitle);
+      const title = document.getElementById('next-title'), details = document.getElementById('next-details');
+      const empty = document.getElementById('next-empty'), lyrics = document.getElementById('next-lyrics');
+      if (!song) {
+        title.textContent = 'Aún no seleccionada'; details.textContent = '';
+        empty.classList.remove('hidden'); lyrics.classList.add('hidden');
+      } else {
+        title.textContent = song.title;
+        details.textContent = `N.º ${song.order} · ${song.key || 'Tono no indicado'} · ${song.group || 'Sin grupo'}`;
+        empty.classList.add('hidden');
+        const hasLyrics = Boolean(song.page || safeLyricsUrl(song.lyrics));
+        lyrics.classList.toggle('hidden', !hasLyrics);
+        lyrics.onclick = () => { nextDialog.close(); openLyrics(song); };
+      }
+      nextDialog.showModal();
+      consultButton.disabled = false; consultButton.textContent = '⏭ Consultar próxima';
+    }
+    async function restoreAdmin() {
+      const savedPassword = sessionStorage.getItem('renacer-admin-password');
+      if (!savedPassword) return;
+      try {
+        const response = await fetch('/api/orden', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action:'authorize', password:savedPassword}) });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error('La sesión expiró.');
+        adminPassword = savedPassword; adminMode = true; render();
+      } catch (_) {
+        sessionStorage.removeItem('renacer-admin-password');
+        adminPassword = ''; adminMode = false;
+      }
     }
     function openLyrics(song) {
       document.getElementById('lyrics-title').textContent = `${song.order}. ${song.title}`;
@@ -259,11 +352,15 @@
     document.getElementById('admin-form').addEventListener('submit', event => { event.preventDefault(); openAdmin(); });
     document.getElementById('cancel-order').addEventListener('click', cancelOrder);
     document.getElementById('save-order').addEventListener('click', saveOrder);
+    document.getElementById('exit-admin').addEventListener('click', exitAdmin);
+    document.getElementById('save-next-song').addEventListener('click', saveNextSong);
+    document.getElementById('next-open').addEventListener('click', consultNext);
+    document.getElementById('close-next').addEventListener('click', () => nextDialog.close());
     document.getElementById('close-lyrics').addEventListener('click', () => { lyricsDialog.close(); lyricsFrame.src = 'about:blank'; });
     lyricsDialog.addEventListener('click', event => { if (event.target === lyricsDialog) { lyricsDialog.close(); lyricsFrame.src = 'about:blank'; } });
     document.getElementById('zoom-out').addEventListener('click', () => { activePdfZoom = Math.max(60, activePdfZoom - 10); updatePdfZoom(); });
     document.getElementById('zoom-in').addEventListener('click', () => { activePdfZoom = Math.min(180, activePdfZoom + 10); updatePdfZoom(); });
-    loadSongs();
+    (async () => { await loadSongs(); await restoreAdmin(); })();
     setInterval(() => { if (!adminMode) loadSongs(); }, 30000);
   </script>
 </body>
