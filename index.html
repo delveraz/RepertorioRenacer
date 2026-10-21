@@ -35,6 +35,8 @@
         <div class="flex flex-wrap justify-end gap-2">
           <button id="next-open" class="min-h-11 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5 text-sm font-bold text-emerald-300 transition hover:bg-emerald-400/20">⏭ Consultar próxima</button>
           <button id="admin-open" class="min-h-11 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5 text-sm font-bold text-emerald-300 transition hover:bg-emerald-400/20">⚙ Cambiar orden</button>
+          <button id="admin-edit-order" class="hidden min-h-11 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5 text-sm font-bold text-emerald-300 transition hover:bg-emerald-400/20">⚙ Cambiar orden</button>
+          <button id="admin-exit" class="hidden min-h-11 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-emerald-50/70">Salir admin</button>
         </div>
       </div>
       <div class="mt-7 grid gap-6 md:grid-cols-[1fr_320px] md:items-end">
@@ -62,10 +64,14 @@
         <div class="flex shrink-0 flex-wrap gap-2">
           <button id="cancel-order" class="min-h-11 rounded-xl border border-white/10 px-3 text-sm font-semibold text-emerald-50/70">Descartar cambios</button>
           <button id="save-order" class="min-h-11 rounded-xl bg-emerald-400 px-4 text-sm font-extrabold text-[#07110d] shadow-lg shadow-emerald-950/40 hover:bg-lime-300">Actualizar orden</button>
-          <button id="exit-admin" class="min-h-11 rounded-xl border border-white/10 px-3 text-sm font-semibold text-emerald-50/70">Salir de admin</button>
         </div>
       </div>
-      <div class="grid gap-3 border-t border-emerald-400/15 pt-4 sm:grid-cols-[1fr_auto] sm:items-end">
+    </div>
+    <div id="admin-next-tools" class="mb-4 hidden flex-col gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-950/40 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="text-sm font-semibold text-emerald-100">Administrador verificado · elige la próxima canción del repertorio</p>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
         <label class="text-sm font-semibold text-emerald-100">Elegir próxima canción
           <select id="next-song-select" class="mt-2 min-h-12 w-full rounded-xl border border-emerald-900 bg-[#07110d] px-3 text-white outline-none focus:border-emerald-400"><option value="">Sin próxima canción seleccionada</option></select>
         </label>
@@ -128,7 +134,7 @@
     const adminDialog = document.getElementById('admin-dialog');
     const nextDialog = document.getElementById('next-dialog');
     let activePdfPage = 1, activePdfZoom = 100;
-    let songs = [], adminMode = false, adminPassword = '', sortable = null, nextSongTitle = '';
+    let songs = [], adminMode = false, reorderMode = false, adminPassword = '', sortable = null, nextSongTitle = '';
 
     function showStatus(message, kind = 'info') {
       statusEl.textContent = message;
@@ -171,27 +177,34 @@
       if (sortable) { sortable.destroy(); sortable = null; }
       const query = document.getElementById('search').value.trim().toLocaleLowerCase('es');
       const group = document.getElementById('group-filter').value;
-      const filtered = adminMode ? songs : songs.filter(s => (!group || (s.group || 'Sin grupo') === group) && [s.title, s.key, s.group, s.order].join(' ').toLocaleLowerCase('es').includes(query));
-      document.getElementById('admin-tools').classList.toggle('hidden', !adminMode);
-      document.getElementById('admin-tools').classList.toggle('flex', adminMode);
+      const displaySongs = !reorderMode && nextSongTitle
+        ? [...songs.filter(song => song.title === nextSongTitle), ...songs.filter(song => song.title !== nextSongTitle)]
+        : songs;
+      const filtered = reorderMode ? songs : displaySongs.filter(s => (!group || (s.group || 'Sin grupo') === group) && [s.title, s.key, s.group, s.order].join(' ').toLocaleLowerCase('es').includes(query));
+      document.getElementById('admin-tools').classList.toggle('hidden', !reorderMode);
+      document.getElementById('admin-tools').classList.toggle('flex', reorderMode);
+      document.getElementById('admin-next-tools').classList.toggle('hidden', !(adminMode && !reorderMode));
+      document.getElementById('admin-next-tools').classList.toggle('flex', adminMode && !reorderMode);
       document.getElementById('admin-open').classList.toggle('hidden', adminMode);
+      document.getElementById('admin-edit-order').classList.toggle('hidden', !adminMode || reorderMode);
+      document.getElementById('admin-exit').classList.toggle('hidden', !adminMode);
       updateNextSongPicker();
-      document.getElementById('search').disabled = adminMode;
-      document.getElementById('group-filter').disabled = adminMode;
-      document.getElementById('refresh').disabled = adminMode;
+      document.getElementById('search').disabled = reorderMode;
+      document.getElementById('group-filter').disabled = reorderMode;
+      document.getElementById('refresh').disabled = reorderMode;
       if (!filtered.length) { listEl.innerHTML = '<div class="glass rounded-2xl p-8 text-center text-emerald-50/55">No hay canciones que coincidan.</div>'; return; }
 
       listEl.innerHTML = filtered.map(song => {
-        const done = Boolean(song.completed), url = safeLyricsUrl(song.lyrics), hasLyrics = Boolean(song.page || url);
+        const done = Boolean(song.completed), isNext = song.title === nextSongTitle && !reorderMode, url = safeLyricsUrl(song.lyrics), hasLyrics = Boolean(song.page || url);
         return `<article data-song-title="${escapeHtml(song.title)}" class="song-card glass ${done ? 'is-done' : ''} flex flex-col gap-4 rounded-2xl p-4 shadow-lg shadow-black/10 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex min-w-0 items-start gap-3">
-            ${adminMode ? `<div class="flex shrink-0 items-center gap-1"><button class="drag-handle min-h-11 min-w-10 rounded-xl bg-emerald-400/10 text-xl text-emerald-300" aria-label="Arrastrar canción" title="Mantén pulsado para arrastrar">⠿</button><div class="flex flex-col gap-1"><button data-move="-1" data-title="${escapeHtml(song.title)}" class="move-btn min-h-8 min-w-9 rounded-lg border border-white/10 text-emerald-200" aria-label="Subir">↑</button><button data-move="1" data-title="${escapeHtml(song.title)}" class="move-btn min-h-8 min-w-9 rounded-lg border border-white/10 text-emerald-200" aria-label="Bajar">↓</button></div></div>` : ''}
+            ${reorderMode ? `<div class="flex shrink-0 items-center gap-1"><button class="drag-handle min-h-11 min-w-10 rounded-xl bg-emerald-400/10 text-xl text-emerald-300" aria-label="Arrastrar canción" title="Mantén pulsado para arrastrar">⠿</button><div class="flex flex-col gap-1"><button data-move="-1" data-title="${escapeHtml(song.title)}" class="move-btn min-h-8 min-w-9 rounded-lg border border-white/10 text-emerald-200" aria-label="Subir">↑</button><button data-move="1" data-title="${escapeHtml(song.title)}" class="move-btn min-h-8 min-w-9 rounded-lg border border-white/10 text-emerald-200" aria-label="Bajar">↓</button></div></div>` : ''}
             <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${done ? 'bg-emerald-400 text-[#07110d]' : 'bg-emerald-950 text-emerald-300'} font-black">${escapeHtml(song.order)}</div>
-            <div class="min-w-0 pt-0.5"><h2 class="font-bold leading-snug text-white">${escapeHtml(song.title)}</h2><div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-emerald-50/55"><span>🎼 ${escapeHtml(song.key || 'Tono no indicado')}</span><span class="text-emerald-400/60">·</span><span>${escapeHtml(song.group || 'Sin grupo')}</span></div></div>
+            <div class="min-w-0 pt-0.5"><h2 class="font-bold leading-snug text-white">${escapeHtml(song.title)} ${isNext ? '<span class="ml-2 inline-flex rounded-full bg-emerald-400/15 px-2 py-0.5 align-middle text-[10px] font-extrabold uppercase tracking-wide text-emerald-300">Próxima</span>' : ''}</h2><div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-emerald-50/55"><span>🎼 ${escapeHtml(song.key || 'Tono no indicado')}</span><span class="text-emerald-400/60">·</span><span>${escapeHtml(song.group || 'Sin grupo')}</span></div></div>
           </div>
-          <div class="flex shrink-0 gap-2 ${adminMode ? 'pl-[5.5rem] sm:pl-0' : 'pl-14 sm:pl-0'}">
+          <div class="flex shrink-0 gap-2 ${reorderMode ? 'pl-[5.5rem] sm:pl-0' : 'pl-14 sm:pl-0'}">
             <button data-lyrics-title="${escapeHtml(song.title)}" class="lyrics-btn min-h-11 rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-bold text-emerald-300 transition hover:bg-emerald-400/20 ${hasLyrics ? '' : 'cursor-not-allowed opacity-40'}" ${hasLyrics ? '' : 'disabled'}>📖 Letra</button>
-            ${adminMode ? '' : `<button data-title="${escapeHtml(song.title)}" data-completed="${!done}" class="toggle-btn min-h-11 rounded-xl px-4 text-sm font-extrabold transition ${done ? 'bg-emerald-400 text-[#07110d] hover:bg-lime-300' : 'bg-[#193325] text-emerald-200 hover:bg-[#234632]'}">${done ? '✓ Lista' : 'Marcar lista'}</button>`}
+            ${reorderMode ? '' : `<button data-title="${escapeHtml(song.title)}" data-completed="${!done}" class="toggle-btn min-h-11 rounded-xl px-4 text-sm font-extrabold transition ${done ? 'bg-emerald-400 text-[#07110d] hover:bg-lime-300' : 'bg-[#193325] text-emerald-200 hover:bg-[#234632]'}">${done ? '✓ Lista' : 'Marcar lista'}</button>`}
           </div>
         </article>`;
       }).join('');
@@ -202,7 +215,7 @@
         if (song) openLyrics(song);
       }));
       document.querySelectorAll('.move-btn').forEach(btn => btn.addEventListener('click', () => moveSong(btn.dataset.title, Number(btn.dataset.move))));
-      if (adminMode && window.Sortable) {
+      if (reorderMode && window.Sortable) {
         sortable = new Sortable(listEl, {
           handle: '.drag-handle', animation: 180, forceFallback: true, fallbackOnBody: true,
           delay: 180, delayOnTouchOnly: true, touchStartThreshold: 5,
@@ -218,6 +231,7 @@
       render();
     }
     function moveSong(title, delta) {
+      if (!reorderMode) return;
       const index = songs.findIndex(song => song.title === title), next = index + delta;
       if (index < 0 || next < 0 || next >= songs.length) return;
       [songs[index], songs[next]] = [songs[next], songs[index]];
@@ -233,10 +247,10 @@
         const response = await fetch('/api/orden', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action:'authorize', password}) });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error('La clave no es correcta.');
-        adminPassword = password; adminMode = true;
+        adminPassword = password; adminMode = true; reorderMode = true;
         sessionStorage.setItem('renacer-admin-password', password);
         adminDialog.close(); document.getElementById('admin-password').value = '';
-        render(); showStatus('Modo administrador activado. Puedes cambiar el orden y elegir la próxima canción. La sesión se conserva en esta pestaña.', 'info');
+        render(); showStatus('Acceso de administrador verificado. Cambia el orden y guárdalo para volver a la vista principal y elegir la próxima canción.', 'info');
       } catch (error) { errorEl.textContent = error.message; errorEl.classList.remove('hidden'); }
       finally { submit.disabled = false; submit.textContent = 'Entrar'; }
     }
@@ -247,16 +261,18 @@
         const response = await fetch('/api/orden', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action:'reorder', password:adminPassword, titles:songs.map(song => song.title)}) });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar el orden.');
-        await loadSongs(); showStatus('Orden actualizado. Sigues en modo administrador; los demás usuarios lo verán al actualizar o en unos segundos.', 'info');
+        reorderMode = false;
+        await loadSongs(); showStatus('Orden actualizado. Sigues como administrador en la vista principal; ahora puedes elegir la próxima canción.', 'info');
       } catch (error) { showStatus(error.message, 'error'); }
       finally { button.disabled = false; button.textContent = 'Actualizar orden'; }
     }
     async function cancelOrder() {
+      reorderMode = false;
       await loadSongs();
-      showStatus('Cambios descartados. Sigues en modo administrador.', 'info');
+      showStatus('Cambios de orden descartados. Sigues como administrador en la vista principal.', 'info');
     }
     async function exitAdmin() {
-      adminMode = false; adminPassword = '';
+      adminMode = false; reorderMode = false; adminPassword = '';
       sessionStorage.removeItem('renacer-admin-password');
       await loadSongs();
       showStatus('Saliste del modo administrador.', 'info');
@@ -271,6 +287,7 @@
         if (!response.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar la próxima canción.');
         nextSongTitle = data.nextSong || '';
         updateNextSongPicker();
+        render();
         showStatus(nextSongTitle ? `Próxima canción guardada: ${nextSongTitle}. Ya está disponible para todos.` : 'Se quitó la próxima canción seleccionada.', 'info');
       } catch (error) { showStatus(error.message, 'error'); }
       finally { button.disabled = false; button.textContent = 'Guardar próxima canción'; }
@@ -306,7 +323,7 @@
         const response = await fetch('/api/orden', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action:'authorize', password:savedPassword}) });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error('La sesión expiró.');
-        adminPassword = savedPassword; adminMode = true; render();
+        adminPassword = savedPassword; adminMode = true; reorderMode = false; render();
       } catch (_) {
         sessionStorage.removeItem('renacer-admin-password');
         adminPassword = ''; adminMode = false;
@@ -348,11 +365,12 @@
     document.getElementById('group-filter').addEventListener('change', render);
     document.getElementById('refresh').addEventListener('click', loadSongs);
     document.getElementById('admin-open').addEventListener('click', () => { document.getElementById('admin-error').classList.add('hidden'); adminDialog.showModal(); document.getElementById('admin-password').focus(); });
+    document.getElementById('admin-edit-order').addEventListener('click', () => { reorderMode = true; render(); showStatus('Modo de cambio de orden activado. Arrastra o usa las flechas y guarda los cambios.', 'info'); });
+    document.getElementById('admin-exit').addEventListener('click', exitAdmin);
     document.getElementById('admin-close').addEventListener('click', () => adminDialog.close());
     document.getElementById('admin-form').addEventListener('submit', event => { event.preventDefault(); openAdmin(); });
     document.getElementById('cancel-order').addEventListener('click', cancelOrder);
     document.getElementById('save-order').addEventListener('click', saveOrder);
-    document.getElementById('exit-admin').addEventListener('click', exitAdmin);
     document.getElementById('save-next-song').addEventListener('click', saveNextSong);
     document.getElementById('next-open').addEventListener('click', consultNext);
     document.getElementById('close-next').addEventListener('click', () => nextDialog.close());
