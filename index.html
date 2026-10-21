@@ -68,15 +68,8 @@
       </div>
     </div>
     <div id="admin-next-tools" class="mb-4 hidden flex-col gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-950/40 p-4">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <p class="text-sm font-semibold text-emerald-100">Administrador verificado · elige la próxima canción del repertorio</p>
-      </div>
-      <div class="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-        <label class="text-sm font-semibold text-emerald-100">Elegir próxima canción
-          <select id="next-song-select" class="mt-2 min-h-12 w-full rounded-xl border border-emerald-900 bg-[#07110d] px-3 text-white outline-none focus:border-emerald-400"><option value="">Sin próxima canción seleccionada</option></select>
-        </label>
-        <button id="save-next-song" class="min-h-12 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 font-bold text-emerald-300 hover:bg-emerald-400/20">Guardar próxima canción</button>
-      </div>
+      <p class="text-sm font-semibold text-emerald-100">Administrador verificado</p>
+      <p class="text-sm text-emerald-50/65">Pulsa «Seleccionar próxima» en una canción. Se guardará para todos y aparecerá al principio de la lista. Pulsa de nuevo la canción marcada para quitarla.</p>
     </div>
     <div id="status" class="mb-4 hidden rounded-xl border p-4 text-sm"></div>
     <div id="song-list" class="space-y-3"></div>
@@ -167,12 +160,6 @@
       select.innerHTML = '<option value="">Todos los grupos</option>' + groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
       select.value = groups.includes(selected) ? selected : '';
     }
-    function updateNextSongPicker() {
-      const select = document.getElementById('next-song-select');
-      if (!select) return;
-      select.innerHTML = '<option value="">Sin próxima canción seleccionada</option>' + songs.map(song => `<option value="${escapeHtml(song.title)}">${escapeHtml(song.order)}. ${escapeHtml(song.title)}</option>`).join('');
-      select.value = songs.some(song => song.title === nextSongTitle) ? nextSongTitle : '';
-    }
     function render() {
       if (sortable) { sortable.destroy(); sortable = null; }
       const query = document.getElementById('search').value.trim().toLocaleLowerCase('es');
@@ -188,7 +175,6 @@
       document.getElementById('admin-open').classList.toggle('hidden', adminMode);
       document.getElementById('admin-edit-order').classList.toggle('hidden', !adminMode || reorderMode);
       document.getElementById('admin-exit').classList.toggle('hidden', !adminMode);
-      updateNextSongPicker();
       document.getElementById('search').disabled = reorderMode;
       document.getElementById('group-filter').disabled = reorderMode;
       document.getElementById('refresh').disabled = reorderMode;
@@ -202,8 +188,9 @@
             <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${done ? 'bg-emerald-400 text-[#07110d]' : 'bg-emerald-950 text-emerald-300'} font-black">${escapeHtml(song.order)}</div>
             <div class="min-w-0 pt-0.5"><h2 class="font-bold leading-snug text-white">${escapeHtml(song.title)} ${isNext ? '<span class="ml-2 inline-flex rounded-full bg-emerald-400/15 px-2 py-0.5 align-middle text-[10px] font-extrabold uppercase tracking-wide text-emerald-300">Próxima</span>' : ''}</h2><div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-emerald-50/55"><span>🎼 ${escapeHtml(song.key || 'Tono no indicado')}</span><span class="text-emerald-400/60">·</span><span>${escapeHtml(song.group || 'Sin grupo')}</span></div></div>
           </div>
-          <div class="flex shrink-0 gap-2 ${reorderMode ? 'pl-[5.5rem] sm:pl-0' : 'pl-14 sm:pl-0'}">
+          <div class="flex shrink-0 flex-wrap gap-2 ${reorderMode ? 'pl-[5.5rem] sm:pl-0' : 'pl-14 sm:pl-0'}">
             <button data-lyrics-title="${escapeHtml(song.title)}" class="lyrics-btn min-h-11 rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-bold text-emerald-300 transition hover:bg-emerald-400/20 ${hasLyrics ? '' : 'cursor-not-allowed opacity-40'}" ${hasLyrics ? '' : 'disabled'}>📖 Letra</button>
+            ${adminMode && !reorderMode ? `<button data-next-title="${escapeHtml(song.title)}" class="next-select-btn min-h-11 rounded-xl border px-3 text-xs font-extrabold transition ${isNext ? 'border-emerald-400/40 bg-emerald-400 text-[#07110d]' : 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/20'}">${isNext ? '✓ Próxima seleccionada' : '⏭ Seleccionar próxima'}</button>` : ''}
             ${reorderMode ? '' : `<button data-title="${escapeHtml(song.title)}" data-completed="${!done}" class="toggle-btn min-h-11 rounded-xl px-4 text-sm font-extrabold transition ${done ? 'bg-emerald-400 text-[#07110d] hover:bg-lime-300' : 'bg-[#193325] text-emerald-200 hover:bg-[#234632]'}">${done ? '✓ Lista' : 'Marcar lista'}</button>`}
           </div>
         </article>`;
@@ -215,6 +202,7 @@
         if (song) openLyrics(song);
       }));
       document.querySelectorAll('.move-btn').forEach(btn => btn.addEventListener('click', () => moveSong(btn.dataset.title, Number(btn.dataset.move))));
+      document.querySelectorAll('.next-select-btn').forEach(btn => btn.addEventListener('click', () => selectNextSong(btn.dataset.nextTitle)));
       if (reorderMode && window.Sortable) {
         sortable = new Sortable(listEl, {
           handle: '.drag-handle', animation: 180, forceFallback: true, fallbackOnBody: true,
@@ -277,20 +265,16 @@
       await loadSongs();
       showStatus('Saliste del modo administrador.', 'info');
     }
-    async function saveNextSong() {
-      const button = document.getElementById('save-next-song');
-      const title = document.getElementById('next-song-select').value;
-      button.disabled = true; button.textContent = 'Guardando…';
+    async function selectNextSong(title) {
+      const clearSelection = title === nextSongTitle;
       try {
-        const response = await fetch('/api/orden', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action:'setNextSong', password:adminPassword, title}) });
+        const response = await fetch('/api/orden', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action:'setNextSong', password:adminPassword, title:clearSelection ? '' : title}) });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar la próxima canción.');
         nextSongTitle = data.nextSong || '';
-        updateNextSongPicker();
         render();
         showStatus(nextSongTitle ? `Próxima canción guardada: ${nextSongTitle}. Ya está disponible para todos.` : 'Se quitó la próxima canción seleccionada.', 'info');
-      } catch (error) { showStatus(error.message, 'error'); }
-      finally { button.disabled = false; button.textContent = 'Guardar próxima canción'; }
+      } catch (error) { showStatus(error.message, 'error'); render(); }
     }
     async function consultNext() {
       const consultButton = document.getElementById('next-open');
@@ -371,7 +355,6 @@
     document.getElementById('admin-form').addEventListener('submit', event => { event.preventDefault(); openAdmin(); });
     document.getElementById('cancel-order').addEventListener('click', cancelOrder);
     document.getElementById('save-order').addEventListener('click', saveOrder);
-    document.getElementById('save-next-song').addEventListener('click', saveNextSong);
     document.getElementById('next-open').addEventListener('click', consultNext);
     document.getElementById('close-next').addEventListener('click', () => nextDialog.close());
     document.getElementById('close-lyrics').addEventListener('click', () => { lyricsDialog.close(); lyricsFrame.src = 'about:blank'; });
