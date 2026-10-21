@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07110d">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.7/Sortable.min.js"></script>
+  <title>Renacer | Repertorio</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; background:#07110d; color:#e7f5ec; }
+    .glass { background:linear-gradient(145deg,rgba(20,39,29,.96),rgba(11,23,17,.98)); border:1px solid rgba(138,190,151,.16); }
+    .song-card { transition: border-color .18s, background .18s, transform .18s; }
+    .song-card:hover { border-color:rgba(74,222,128,.42); }
+    .song-card.is-done { background:linear-gradient(115deg,rgba(20,83,45,.38),rgba(11,23,17,.98)); border-color:rgba(74,222,128,.32); }
+    .drag-handle { touch-action:none; user-select:none; cursor:grab; }
+    .drag-handle:active { cursor:grabbing; }
+    .sortable-ghost { opacity:.3; border:2px dashed #4ade80; }
+    .sortable-chosen { border-color:#4ade80; }
+    dialog::backdrop { background:rgba(0,0,0,.78); backdrop-filter:blur(5px); }
+    dialog { color:#e7f5ec; background:#0b1710; }
+    input,select { color-scheme:dark; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <header class="relative overflow-hidden border-b border-emerald-950 bg-[#050b07]">
+    <div class="pointer-events-none absolute -right-24 -top-40 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl"></div>
+    <div class="relative mx-auto max-w-6xl px-4 pb-7 pt-5 sm:px-6 sm:pb-10 sm:pt-7">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400 text-2xl font-black text-[#07110d] shadow-lg shadow-emerald-950/40">♪</div>
+          <div><p class="text-xs font-bold uppercase tracking-[.24em] text-emerald-400">Música cristiana</p><p class="text-sm text-emerald-100/65">Grupo Musical</p></div>
+        </div>
+        <button id="admin-open" class="min-h-11 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5 text-sm font-bold text-emerald-300 transition hover:bg-emerald-400/20">⚙ Cambiar orden</button>
+      </div>
+      <div class="mt-7 grid gap-6 md:grid-cols-[1fr_320px] md:items-end">
+        <div>
+          <h1 class="text-4xl font-black tracking-tight text-white sm:text-5xl">Renacer<span class="text-emerald-400">.</span></h1>
+          <p class="mt-2 text-base text-emerald-50/65">Repertorio del coro · Cantamos con fe</p>
+        </div>
+        <div class="rounded-2xl border border-emerald-400/15 bg-emerald-950/30 p-4">
+          <div class="mb-2 flex items-center justify-between text-sm"><span id="progress-label" class="font-semibold text-emerald-50">Cargando repertorio…</span><span id="progress-count" class="text-emerald-300/75"></span></div>
+          <div class="h-2 overflow-hidden rounded-full bg-black/50"><div id="progress-bar" class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-lime-300 transition-all" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+    <div class="mb-4 flex flex-col gap-3 lg:flex-row">
+      <input id="search" type="search" placeholder="Buscar canción, tono o grupo…" class="min-h-12 flex-1 rounded-xl border border-emerald-950 bg-[#0c1911] px-4 text-white outline-none placeholder:text-emerald-50/35 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15">
+      <select id="group-filter" class="min-h-12 rounded-xl border border-emerald-950 bg-[#0c1911] px-4 text-emerald-50/80 outline-none focus:border-emerald-500"><option value="">Todos los grupos</option></select>
+      <button id="refresh" class="min-h-12 rounded-xl border border-white/10 bg-white/5 px-4 font-semibold text-emerald-50/80 transition hover:bg-white/10">↻ Actualizar</button>
+    </div>
+    <div id="admin-tools" class="mb-4 hidden items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-950/40 p-4">
+      <p class="text-sm font-medium text-emerald-100">Mantén pulsado el asa <span class="text-lg text-emerald-300">⠿</span> y arrastra. También puedes usar las flechas.</p>
+      <div class="flex shrink-0 gap-2">
+        <button id="cancel-order" class="min-h-11 rounded-xl border border-white/10 px-3 text-sm font-semibold text-emerald-50/70">Cancelar</button>
+        <button id="save-order" class="min-h-11 rounded-xl bg-emerald-400 px-4 text-sm font-extrabold text-[#07110d] shadow-lg shadow-emerald-950/40 hover:bg-lime-300">Actualizar orden</button>
+      </div>
+    </div>
+    <div id="status" class="mb-4 hidden rounded-xl border p-4 text-sm"></div>
+    <div id="song-list" class="space-y-3"></div>
+  </main>
+
+  <dialog id="admin-dialog" class="w-[min(92vw,420px)] rounded-3xl border border-emerald-400/20 p-0 shadow-2xl">
+    <form id="admin-form" class="p-6">
+      <div class="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-xl text-emerald-300">🔐</div>
+      <h2 class="text-xl font-bold text-white">Acceso de administrador</h2>
+      <p class="mt-1 text-sm text-emerald-50/55">Ingresa la clave para cambiar el orden del repertorio.</p>
+      <input id="admin-password" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Clave" class="mt-5 min-h-12 w-full rounded-xl border border-emerald-900 bg-[#07110d] px-4 text-white outline-none focus:border-emerald-400">
+      <p id="admin-error" class="mt-2 hidden text-sm text-rose-300"></p>
+      <div class="mt-5 flex justify-end gap-2">
+        <button id="admin-close" type="button" class="min-h-11 rounded-xl border border-white/10 px-4 text-sm font-semibold text-emerald-50/70">Cancelar</button>
+        <button id="admin-submit" type="submit" class="min-h-11 rounded-xl bg-emerald-400 px-5 text-sm font-extrabold text-[#07110d] hover:bg-lime-300">Entrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="lyrics-dialog" class="h-[92dvh] w-[min(96vw,1100px)] max-w-none overflow-hidden rounded-2xl border border-emerald-400/20 p-0 shadow-2xl">
+    <div class="flex h-full flex-col bg-[#0b1710]">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-950 px-4 py-3 sm:px-6">
+        <div class="min-w-0"><p class="text-xs font-bold uppercase tracking-wider text-emerald-400">Letra de la canción</p><h2 id="lyrics-title" class="truncate text-lg font-bold text-white"></h2></div>
+        <div class="flex items-center gap-2">
+          <button id="zoom-out" class="min-h-11 min-w-11 rounded-xl border border-white/10 text-lg font-bold text-emerald-100">−</button>
+          <span id="zoom-label" class="min-w-12 text-center text-sm text-emerald-100">100%</span>
+          <button id="zoom-in" class="min-h-11 min-w-11 rounded-xl border border-white/10 text-lg font-bold text-emerald-100">+</button>
+          <button id="close-lyrics" class="ml-1 min-h-11 rounded-xl bg-emerald-400 px-4 text-sm font-bold text-[#07110d]">Cerrar</button>
+        </div>
+      </div>
+      <div class="min-h-0 flex-1 bg-[#111914]"><iframe id="lyrics-frame" title="Previsualización de la letra" class="h-full w-full border-0" src="about:blank"></iframe></div>
+    </div>
+  </dialog>
+  <footer class="border-t border-emerald-950 py-6 text-center text-xs text-emerald-50/35">RENACER · Música para alabar</footer>
+
+  <script>
+    const listEl = document.getElementById('song-list');
+    const statusEl = document.getElementById('status');
+    const lyricsDialog = document.getElementById('lyrics-dialog');
+    const lyricsFrame = document.getElementById('lyrics-frame');
+    const adminDialog = document.getElementById('admin-dialog');
+    let activePdfPage = 1, activePdfZoom = 100;
+    let songs = [], adminMode = false, adminPassword = '', sortable = null;
+
+    function showStatus(message, kind = 'info') {
+      statusEl.textContent = message;
+      statusEl.className = 'mb-4 rounded-xl border p-4 text-sm ' + (kind === 'error' ? 'border-rose-400/20 bg-rose-950/40 text-rose-200' : 'border-emerald-400/20 bg-emerald-950/40 text-emerald-100');
+      statusEl.classList.remove('hidden');
+    }
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function safeLyricsUrl(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      try { const u = new URL(raw, window.location.origin); return ['https:', 'http:'].includes(u.protocol) ? u.href : ''; } catch (_) { return ''; }
+    }
+    async function loadSongs() {
+      try {
+        const response = await fetch('/api/canciones', { cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'No se pudieron cargar las canciones.');
+        songs = (data.songs || []).sort((a, b) => Number(a.order) - Number(b.order));
+        updateGroups(); render(); updateProgress();
+        statusEl.classList.add('hidden');
+      } catch (error) { showStatus('Error al cargar el repertorio: ' + error.message, 'error'); }
+    }
+    function updateGroups() {
+      const select = document.getElementById('group-filter'), selected = select.value;
+      const groups = [...new Set(songs.map(s => s.group || 'Sin grupo'))].sort((a,b) => a.localeCompare(b, 'es'));
+      select.innerHTML = '<option value="">Todos los grupos</option>' + groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+      select.value = groups.includes(selected) ? selected : '';
+    }
+    function render() {
+      if (sortable) { sortable.destroy(); sortable = null; }
+      const query = document.getElementById('search').value.trim().toLocaleLowerCase('es');
+      const group = document.getElementById('group-filter').value;
+      const filtered = adminMode ? songs : songs.filter(s => (!group || (s.group || 'Sin grupo') === group) && [s.title, s.key, s.group, s.order].join(' ').toLocaleLowerCase('es').includes(query));
+      document.getElementById('admin-tools').classList.toggle('hidden', !adminMode);
+      document.getElementById('admin-tools').classList.toggle('flex', adminMode);
+      document.getElementById('admin-open').classList.toggle('hidden', adminMode);
+      document.getElementById('search').disabled = adminMode;
+      document.getElementById('group-filter').disabled = adminMode;
+      document.getElementById('refresh').disabled = adminMode;
+      if (!filtered.length) { listEl.innerHTML = '<div class="glass rounded-2xl p-8 text-center text-emerald-50/55">No hay canciones que coincidan.</div>'; return; }
+
+      listEl.innerHTML = filtered.map(song => {
+        const done = Boolean(song.completed), url = safeLyricsUrl(song.lyrics), hasLyrics = Boolean(song.page || url);
+        return `<article data-song-title="${escapeHtml(song.title)}" class="song-card glass ${done ? 'is-done' : ''} flex flex-col gap-4 rounded-2xl p-4 shadow-lg shadow-black/10 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex min-w-0 items-start gap-3">
+            ${adminMode ? `<div class="flex shrink-0 items-center gap-1"><button class="drag-handle min-h-11 min-w-10 rounded-xl bg-emerald-400/10 text-xl text-emerald-300" aria-label="Arrastrar canción" title="Mantén pulsado para arrastrar">⠿</button><div class="flex flex-col gap-1"><button data-move="-1" data-title="${escapeHtml(song.title)}" class="move-btn min-h-8 min-w-9 rounded-lg border border-white/10 text-emerald-200" aria-label="Subir">↑</button><button data-move="1" data-title="${escapeHtml(song.title)}" class="move-btn min-h-8 min-w-9 rounded-lg border border-white/10 text-emerald-200" aria-label="Bajar">↓</button></div></div>` : ''}
+            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${done ? 'bg-emerald-400 text-[#07110d]' : 'bg-emerald-950 text-emerald-300'} font-black">${escapeHtml(song.order)}</div>
+            <div class="min-w-0 pt-0.5"><h2 class="font-bold leading-snug text-white">${escapeHtml(song.title)}</h2><div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-emerald-50/55"><span>🎼 ${escapeHtml(song.key || 'Tono no indicado')}</span><span class="text-emerald-400/60">·</span><span>${escapeHtml(song.group || 'Sin grupo')}</span></div></div>
+          </div>
+          <div class="flex shrink-0 gap-2 ${adminMode ? 'pl-[5.5rem] sm:pl-0' : 'pl-14 sm:pl-0'}">
+            <button data-lyrics-title="${escapeHtml(song.title)}" class="lyrics-btn min-h-11 rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-bold text-emerald-300 transition hover:bg-emerald-400/20 ${hasLyrics ? '' : 'cursor-not-allowed opacity-40'}" ${hasLyrics ? '' : 'disabled'}>📖 Letra</button>
+            ${adminMode ? '' : `<button data-title="${escapeHtml(song.title)}" data-completed="${!done}" class="toggle-btn min-h-11 rounded-xl px-4 text-sm font-extrabold transition ${done ? 'bg-emerald-400 text-[#07110d] hover:bg-lime-300' : 'bg-[#193325] text-emerald-200 hover:bg-[#234632]'}">${done ? '✓ Lista' : 'Marcar lista'}</button>`}
+          </div>
+        </article>`;
+      }).join('');
+
+      document.querySelectorAll('.toggle-btn').forEach(btn => btn.addEventListener('click', () => updateSong(btn)));
+      document.querySelectorAll('.lyrics-btn:not(:disabled)').forEach(btn => btn.addEventListener('click', () => {
+        const song = songs.find(s => s.title === btn.dataset.lyricsTitle);
+        if (song) openLyrics(song);
+      }));
+      document.querySelectorAll('.move-btn').forEach(btn => btn.addEventListener('click', () => moveSong(btn.dataset.title, Number(btn.dataset.move))));
+      if (adminMode && window.Sortable) {
+        sortable = new Sortable(listEl, {
+          handle: '.drag-handle', animation: 180, forceFallback: true, fallbackOnBody: true,
+          delay: 180, delayOnTouchOnly: true, touchStartThreshold: 5,
+          onEnd: syncOrderFromList
+        });
+      }
+    }
+    function syncOrderFromList() {
+      const titles = [...listEl.querySelectorAll('[data-song-title]')].map(card => card.dataset.songTitle);
+      const byTitle = new Map(songs.map(song => [song.title, song]));
+      songs = titles.map(title => byTitle.get(title)).filter(Boolean);
+      songs.forEach((song, index) => { song.order = index + 1; });
+      render();
+    }
+    function moveSong(title, delta) {
+      const index = songs.findIndex(song => song.title === title), next = index + delta;
+      if (index < 0 || next < 0 || next >= songs.length) return;
+      [songs[index], songs[next]] = [songs[next], songs[index]];
+      songs.forEach((song, i) => { song.order = i + 1; });
+      render();
+    }
+    async function openAdmin() {
+      const password = document.getElementById('admin-password').value;
+      const errorEl = document.getElementById('admin-error');
+      const submit = document.getElementById('admin-submit');
+      submit.disabled = true; submit.textContent = 'Verificando…';
+      try {
+        const response = await fetch('/api/orden', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action:'authorize', password}) });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error('La clave no es correcta.');
+        adminPassword = password; adminMode = true;
+        adminDialog.close(); document.getElementById('admin-password').value = '';
+        render(); showStatus('Modo de edición activado. Arrastra las canciones o usa las flechas y pulsa “Actualizar orden” para guardar.', 'info');
+      } catch (error) { errorEl.textContent = error.message; errorEl.classList.remove('hidden'); }
+      finally { submit.disabled = false; submit.textContent = 'Entrar'; }
+    }
+    async function saveOrder() {
+      const button = document.getElementById('save-order');
+      button.disabled = true; button.textContent = 'Actualizando…';
+      try {
+        const response = await fetch('/api/orden', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({action:'reorder', password:adminPassword, titles:songs.map(song => song.title)}) });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar el orden.');
+        adminMode = false; adminPassword = '';
+        await loadSongs(); showStatus('Orden actualizado. Los demás usuarios lo verán al actualizar o en unos segundos.', 'info');
+      } catch (error) { showStatus(error.message, 'error'); }
+      finally { button.disabled = false; button.textContent = 'Actualizar orden'; }
+    }
+    async function cancelOrder() {
+      adminMode = false; adminPassword = '';
+      await loadSongs();
+    }
+    function openLyrics(song) {
+      document.getElementById('lyrics-title').textContent = `${song.order}. ${song.title}`;
+      activePdfPage = Math.max(1, Number(song.page) || 1); activePdfZoom = 100;
+      document.getElementById('zoom-label').textContent = activePdfZoom + '%';
+      const fileUrl = song.page ? safeLyricsUrl('/letras.pdf') : '';
+      const docUrl = safeLyricsUrl(song.lyrics);
+      lyricsFrame.src = fileUrl ? `${fileUrl}#page=${activePdfPage}&zoom=${activePdfZoom}` : docUrl;
+      if (typeof lyricsDialog.showModal === 'function') lyricsDialog.showModal(); else lyricsDialog.setAttribute('open', '');
+    }
+    function updatePdfZoom() {
+      document.getElementById('zoom-label').textContent = activePdfZoom + '%';
+      if (lyricsFrame.src.includes('/letras.pdf')) lyricsFrame.src = `/letras.pdf#page=${activePdfPage}&zoom=${activePdfZoom}`;
+    }
+    function updateProgress() {
+      const complete = songs.filter(s => s.completed).length, total = songs.length;
+      const percent = total ? Math.round(complete / total * 100) : 0;
+      document.getElementById('progress-label').textContent = `${percent}% completado`;
+      document.getElementById('progress-count').textContent = `${complete} de ${total} canciones`;
+      document.getElementById('progress-bar').style.width = percent + '%';
+    }
+    async function updateSong(button) {
+      const title = button.dataset.title, completed = button.dataset.completed === 'true';
+      button.disabled = true; button.textContent = 'Guardando…';
+      try {
+        const response = await fetch('/api/completada', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({title, completed}) });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar.');
+        const song = songs.find(s => s.title === title); if (song) song.completed = completed;
+        render(); updateProgress();
+      } catch (error) { showStatus('No se pudo guardar el cambio: ' + error.message, 'error'); button.disabled = false; button.textContent = completed ? 'Marcar lista' : '✓ Lista'; }
+    }
+
+    document.getElementById('search').addEventListener('input', render);
+    document.getElementById('group-filter').addEventListener('change', render);
+    document.getElementById('refresh').addEventListener('click', loadSongs);
+    document.getElementById('admin-open').addEventListener('click', () => { document.getElementById('admin-error').classList.add('hidden'); adminDialog.showModal(); document.getElementById('admin-password').focus(); });
+    document.getElementById('admin-close').addEventListener('click', () => adminDialog.close());
+    document.getElementById('admin-form').addEventListener('submit', event => { event.preventDefault(); openAdmin(); });
+    document.getElementById('cancel-order').addEventListener('click', cancelOrder);
+    document.getElementById('save-order').addEventListener('click', saveOrder);
+    document.getElementById('close-lyrics').addEventListener('click', () => { lyricsDialog.close(); lyricsFrame.src = 'about:blank'; });
+    lyricsDialog.addEventListener('click', event => { if (event.target === lyricsDialog) { lyricsDialog.close(); lyricsFrame.src = 'about:blank'; } });
+    document.getElementById('zoom-out').addEventListener('click', () => { activePdfZoom = Math.max(60, activePdfZoom - 10); updatePdfZoom(); });
+    document.getElementById('zoom-in').addEventListener('click', () => { activePdfZoom = Math.min(180, activePdfZoom + 10); updatePdfZoom(); });
+    loadSongs();
+    setInterval(() => { if (!adminMode) loadSongs(); }, 30000);
+  </script>
+</body>
+</html>
