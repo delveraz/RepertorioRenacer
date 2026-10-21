@@ -6,6 +6,12 @@
   <meta name="theme-color" content="#07110d">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.7/Sortable.min.js"></script>
+  <script>
+    window.pdfjsReady = import('https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/build/pdf.mjs').then(pdfjsLib => {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/build/pdf.worker.mjs';
+      return pdfjsLib;
+    });
+  </script>
   <title>Renacer | Repertorio</title>
   <style>
     :root { color-scheme: dark; }
@@ -114,7 +120,13 @@
           <button id="close-lyrics" class="ml-1 min-h-11 rounded-xl bg-emerald-400 px-4 text-sm font-bold text-[#07110d]">Cerrar</button>
         </div>
       </div>
-      <div class="min-h-0 flex-1 bg-[#111914]"><iframe id="lyrics-frame" title="Previsualización de la letra" class="h-full w-full border-0" src="about:blank"></iframe></div>
+      <div id="pdf-viewport" class="hidden min-h-0 flex-1 overflow-auto bg-[#111914] p-3 sm:p-5">
+        <p id="pdf-loading" class="py-8 text-center text-sm text-emerald-50/60">Cargando letra…</p>
+        <p id="pdf-error" class="mx-auto hidden max-w-xl py-8 text-center text-sm text-rose-200">No se pudo mostrar la letra. Puedes abrir el PDF en otra pestaña.</p>
+        <div class="mx-auto w-fit"><canvas id="pdf-canvas" class="hidden shadow-xl"></canvas></div>
+        <a id="pdf-fallback" class="mx-auto mt-3 hidden w-fit rounded-lg border border-emerald-400/25 px-4 py-2 text-sm font-semibold text-emerald-300" target="_blank" rel="noopener">Abrir PDF en otra pestaña</a>
+      </div>
+      <div id="iframe-viewport" class="hidden min-h-0 flex-1 bg-[#111914]"><iframe id="lyrics-frame" title="Previsualización de la letra" class="h-full w-full border-0" src="about:blank"></iframe></div>
     </div>
   </dialog>
   <footer class="border-t border-emerald-950 py-6 text-center text-xs text-emerald-50/35">RENACER · Música para alabar</footer>
@@ -124,9 +136,13 @@
     const statusEl = document.getElementById('status');
     const lyricsDialog = document.getElementById('lyrics-dialog');
     const lyricsFrame = document.getElementById('lyrics-frame');
+    const pdfViewport = document.getElementById('pdf-viewport');
+    const pdfCanvas = document.getElementById('pdf-canvas');
+    const iframeViewport = document.getElementById('iframe-viewport');
     const adminDialog = document.getElementById('admin-dialog');
     const nextDialog = document.getElementById('next-dialog');
     let activePdfPage = 1, activePdfZoom = 100;
+    let pdfDocument = null, pdfRenderTask = null, pdfRenderGeneration = 0, activePdfMode = false, resizeTimer = null;
     let songs = [], adminMode = false, reorderMode = false, adminPassword = '', sortable = null, nextSongTitle = '';
 
     function showStatus(message, kind = 'info') {
@@ -274,7 +290,12 @@
         nextSongTitle = data.nextSong || '';
         render();
         showStatus(nextSongTitle ? `Próxima canción guardada: ${nextSongTitle}. Ya está disponible para todos.` : 'Se quitó la próxima canción seleccionada.', 'info');
-      } catch (error) { showStatus(error.message, 'error'); render(); }
+      } catch (error) {
+        const message = error.message === 'Acción no válida.'
+          ? 'El Apps Script conectado aún no reconoce la selección de próxima. Actualiza Codigo.gs y publica una nueva versión del despliegue.'
+          : error.message;
+        showStatus(message, 'error'); render();
+      }
     }
     async function consultNext() {
       const consultButton = document.getElementById('next-open');
@@ -313,18 +334,72 @@
         adminPassword = ''; adminMode = false;
       }
     }
-    function openLyrics(song) {
+    async function openLyrics(song) {
       document.getElementById('lyrics-title').textContent = `${song.order}. ${song.title}`;
       activePdfPage = Math.max(1, Number(song.page) || 1); activePdfZoom = 100;
       document.getElementById('zoom-label').textContent = activePdfZoom + '%';
-      const fileUrl = song.page ? safeLyricsUrl('/letras.pdf') : '';
-      const docUrl = safeLyricsUrl(song.lyrics);
-      lyricsFrame.src = fileUrl ? `${fileUrl}#page=${activePdfPage}&zoom=${activePdfZoom}` : docUrl;
+      activePdfMode = Boolean(song.page);
       if (typeof lyricsDialog.showModal === 'function') lyricsDialog.showModal(); else lyricsDialog.setAttribute('open', '');
+      if (activePdfMode) {
+        iframeViewport.classList.add('hidden');
+        lyricsFrame.src = 'about:blank';
+        pdfViewport.classList.remove('hidden');
+        document.getElementById('pdf-loading').classList.remove('hidden');
+        document.getElementById('pdf-error').classList.add('hidden');
+        document.getElementById('pdf-fallback').classList.add('hidden');
+        pdfCanvas.classList.add('hidden');
+        try { await renderPdfPage(); }
+        catch (error) {
+          document.getElementById('pdf-loading').classList.add('hidden');
+          document.getElementById('pdf-error').classList.remove('hidden');
+          const fallback = document.getElementById('pdf-fallback');
+          fallback.href = `/letras.pdf#page=${activePdfPage}`;
+          fallback.classList.remove('hidden');
+          console.error('Error al mostrar el PDF:', error);
+        }
+      } else {
+        pdfViewport.classList.add('hidden');
+        iframeViewport.classList.remove('hidden');
+        lyricsFrame.src = safeLyricsUrl(song.lyrics) || 'about:blank';
+      }
+    }
+    async function renderPdfPage() {
+      const generation = ++pdfRenderGeneration;
+      if (pdfRenderTask) { try { pdfRenderTask.cancel(); } catch (_) {} pdfRenderTask = null; }
+      const pdfjsLib = await window.pdfjsReady;
+      if (!pdfDocument) pdfDocument = await pdfjsLib.getDocument({ url: '/letras.pdf' }).promise;
+      const pageNumber = Math.min(activePdfPage, pdfDocument.numPages);
+      const page = await pdfDocument.getPage(pageNumber);
+      const viewportElement = document.getElementById('pdf-viewport');
+      const baseViewport = page.getViewport({ scale: 1 });
+      const availableWidth = Math.max(180, viewportElement.clientWidth - 24);
+      const fitScale = Math.min(availableWidth / baseViewport.width, 1.5);
+      const viewport = page.getViewport({ scale: fitScale * activePdfZoom / 100 });
+      const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+      const context = pdfCanvas.getContext('2d', { alpha: false });
+      pdfCanvas.width = Math.floor(viewport.width * outputScale);
+      pdfCanvas.height = Math.floor(viewport.height * outputScale);
+      pdfCanvas.style.width = `${Math.floor(viewport.width)}px`;
+      pdfCanvas.style.height = `${Math.floor(viewport.height)}px`;
+      document.getElementById('pdf-loading').classList.add('hidden');
+      document.getElementById('pdf-error').classList.add('hidden');
+      pdfCanvas.classList.remove('hidden');
+      if (generation !== pdfRenderGeneration) return;
+      pdfRenderTask = page.render({
+        canvasContext: context,
+        viewport,
+        transform: outputScale === 1 ? null : [outputScale, 0, 0, outputScale, 0, 0]
+      });
+      try { await pdfRenderTask.promise; }
+      catch (error) { if (error.name !== 'RenderingCancelledException') throw error; }
+      finally { if (generation === pdfRenderGeneration) pdfRenderTask = null; }
     }
     function updatePdfZoom() {
       document.getElementById('zoom-label').textContent = activePdfZoom + '%';
-      if (lyricsFrame.src.includes('/letras.pdf')) lyricsFrame.src = `/letras.pdf#page=${activePdfPage}&zoom=${activePdfZoom}`;
+      if (activePdfMode) renderPdfPage().catch(error => {
+        document.getElementById('pdf-error').classList.remove('hidden');
+        console.error('Error al actualizar el zoom del PDF:', error);
+      });
     }
     function updateProgress() {
       const complete = songs.filter(s => s.completed).length, total = songs.length;
@@ -357,10 +432,28 @@
     document.getElementById('save-order').addEventListener('click', saveOrder);
     document.getElementById('next-open').addEventListener('click', consultNext);
     document.getElementById('close-next').addEventListener('click', () => nextDialog.close());
-    document.getElementById('close-lyrics').addEventListener('click', () => { lyricsDialog.close(); lyricsFrame.src = 'about:blank'; });
-    lyricsDialog.addEventListener('click', event => { if (event.target === lyricsDialog) { lyricsDialog.close(); lyricsFrame.src = 'about:blank'; } });
+    function closeLyrics() {
+      lyricsDialog.close();
+      lyricsFrame.src = 'about:blank';
+      activePdfMode = false;
+      pdfRenderGeneration++;
+      if (pdfRenderTask) { try { pdfRenderTask.cancel(); } catch (_) {} pdfRenderTask = null; }
+    }
+    document.getElementById('close-lyrics').addEventListener('click', closeLyrics);
+    lyricsDialog.addEventListener('click', event => { if (event.target === lyricsDialog) closeLyrics(); });
+    lyricsDialog.addEventListener('close', () => {
+      activePdfMode = false;
+      pdfRenderGeneration++;
+      if (pdfRenderTask) { try { pdfRenderTask.cancel(); } catch (_) {} pdfRenderTask = null; }
+      lyricsFrame.src = 'about:blank';
+    });
     document.getElementById('zoom-out').addEventListener('click', () => { activePdfZoom = Math.max(60, activePdfZoom - 10); updatePdfZoom(); });
     document.getElementById('zoom-in').addEventListener('click', () => { activePdfZoom = Math.min(180, activePdfZoom + 10); updatePdfZoom(); });
+    window.addEventListener('resize', () => {
+      if (!activePdfMode) return;
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => renderPdfPage().catch(error => console.error('Error al adaptar el PDF:', error)), 120);
+    });
     (async () => { await loadSongs(); await restoreAdmin(); })();
     setInterval(() => { if (!adminMode) loadSongs(); }, 30000);
   </script>
